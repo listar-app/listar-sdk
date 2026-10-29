@@ -10,7 +10,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/listar-app/listar-sdk.git"
+    "url": "git+https://github.com/listar-app/listar-sdk.git"
   },
   "bugs": {
     "url": "https://github.com/listar-app/listar-sdk/issues"
