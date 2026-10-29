@@ -1,0 +1,82 @@
+{
+  "name": "listar",
+  "version": "0.1.0",
+  "description": "Official TypeScript SDK for the Listar API: verified B2B emails, phone numbers and company decision makers",
+  "license": "MIT",
+  "homepage": "https://listar.fr/en/integrations",
+  "author": {
+    "name": "Listar",
+    "email": "contact@listar.fr"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/listar-app/listar-sdk.git"
+  },
+  "bugs": {
+    "url": "https://github.com/listar-app/listar-sdk/issues"
+  },
+  "keywords": [
+    "listar",
+    "enrichment",
+    "b2b",
+    "email finder",
+    "phone number",
+    "email verification",
+    "lead generation",
+    "sdk"
+  ],
+  "type": "module",
+  "main": "./dist/client.cjs",
+  "module": "./dist/client.js",
+  "types": "./dist/client.d.ts",
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/client.d.ts",
+        "default": "./dist/client.js"
+      },
+      "require": {
+        "types": "./dist/client.d.cts",
+        "default": "./dist/client.cjs"
+      }
+    },
+    "./webhooks": {
+      "import": {
+        "types": "./dist/webhooks.d.ts",
+        "default": "./dist/webhooks.js"
+      },
+      "require": {
+        "types": "./dist/webhooks.d.cts",
+        "default": "./dist/webhooks.cjs"
+      }
+    }
+  },
+  "typesVersions": {
+    "*": {
+      "webhooks": [
+        "./dist/webhooks.d.ts"
+      ]
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "sideEffects": false,
+  "scripts": {
+    "generate": "openapi-typescript https://api.listar.fr/openapi.en.json --default-non-nullable false -o src/openapi.ts && node scripts/sanitize-openapi.mjs",
+    "build": "tsup",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "prepublishOnly": "yarn typecheck && yarn test && yarn build"
+  },
+  "devDependencies": {
+    "@types/node": "^20",
+    "openapi-typescript": "^7.4.0",
+    "tsup": "^8.3.0",
+    "typescript": "^5.6.0",
+    "vitest": "^2.1.0"
+  }
+}
