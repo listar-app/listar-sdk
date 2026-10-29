@@ -1,5 +1,5 @@
 {
-  "name": "listar",
+  "name": "@listar-app/sdk",
   "version": "0.1.0",
   "description": "Official TypeScript SDK for the Listar API: verified B2B emails, phone numbers and company decision makers",
   "license": "MIT",

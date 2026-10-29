@@ -1,4 +1,4 @@
-# listar
+# @listar-app/sdk
 
 Official TypeScript SDK for the [Listar](https://listar.fr) API: verified B2B emails, phone numbers and the decision makers of any company.
 
@@ -8,7 +8,7 @@ Official TypeScript SDK for the [Listar](https://listar.fr) API: verified B2B em
 - Webhook signature verification included
 
 ```bash
-npm install listar
+npm install @listar-app/sdk
 ```
 
 ## Quick start
@@ -16,7 +16,7 @@ npm install listar
 Create an API key in [Settings › API keys](https://listar.fr/en/settings/api-keys).
 
 ```ts
-import { Listar } from 'listar';
+import { Listar } from '@listar-app/sdk';
 
 const listar = new Listar({ apiKey: process.env.LISTAR_API_KEY! });
 
@@ -113,7 +113,7 @@ const csv = await listar.exportSearchesCsv({ from: '2026-10-01' });
 Every webhook carries an `X-Listar-Signature` header. Verify it against your signing secret (Settings › API keys), on the raw body:
 
 ```ts
-import { parseWebhookEvent } from 'listar/webhooks';
+import { parseWebhookEvent } from '@listar-app/sdk/webhooks';
 
 // Express: app.post('/webhooks/listar', express.text({ type: '*/*' }), handler)
 const event = await parseWebhookEvent(
@@ -134,7 +134,7 @@ The same event can arrive more than once: deduplicate on its `id` and `status`.
 Any other answer throws a `ListarError` with `status`, `body` and, on a 429, `retryAfter` (seconds) when the API sends it. Network failures and timeouts (120 s by default, `timeoutMs` to change it) throw a `ListarError` with `status` 0.
 
 ```ts
-import { ListarError } from 'listar';
+import { ListarError } from '@listar-app/sdk';
 
 try {
   await listar.getCreditBalance();
