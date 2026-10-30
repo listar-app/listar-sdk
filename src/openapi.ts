@@ -544,11 +544,11 @@ export interface components {
             /** @description Company website: its domain corroborates professional emails. */
             website?: string;
             /**
-             * @description Limit enrichment to phone or email only. Only the requested channel is delivered and billed.
+             * @description Limit enrichment to phone or email only. Only the requested channel is delivered and billed; the LinkedIn profile (`linkedinProfile`) is included for free. `none`: the LinkedIn profile alone (URL, current job title and company), without any phone or email search, billed only when it adds something the query lacked.
              * @default both
              * @enum {string}
              */
-            enrichmentType?: "both" | "phone" | "email";
+            enrichmentType?: "both" | "phone" | "email" | "none";
             /**
              * @description Deliver PROFESSIONAL emails. `enrichmentType` picks the channel (phone / email); this picks which email within that channel.
              * @default true
@@ -682,6 +682,19 @@ export interface components {
             };
             bestPhone?: components["schemas"]["PhoneInfo"];
             bestEmail?: components["schemas"]["EmailInfo"];
+            /** @description The person's LinkedIn profile: free with a phone or an email, billed alone (`enrichmentType: none`). */
+            linkedinProfile?: {
+                url?: string | null;
+                jobTitle?: string | null;
+                company?: string | null;
+                /**
+                 * Format: date-time
+                 * @description When the source saw this position.
+                 */
+                observedAt?: string | null;
+                /** @description Billed: adds something the query lacked. */
+                billable?: boolean;
+            };
             /** @description Present and `true` when the person exercised their GDPR rights (erasure or objection): `profiles` is empty and nothing is billed. */
             excluded?: boolean;
             /** @example true */
@@ -888,6 +901,17 @@ export interface components {
             persoEmail?: string | null;
             /** @enum {string|null} */
             persoEmailStatus?: "verified" | "not_verified" | null;
+            /** @description The person's LinkedIn profile. */
+            linkedinUrl?: string | null;
+            /** @description Current job title read from LinkedIn. */
+            jobTitle?: string | null;
+            /** @description Current company read from LinkedIn. */
+            company?: string | null;
+            /**
+             * Format: date-time
+             * @description When the source saw this position. Absent when the source does not date it.
+             */
+            positionObservedAt?: string | null;
         };
         /** @description POST body sent to your callbackUrl when a batch (POST /search/bulk) completes. The result is flattened per contact (`results[]`), not the single-contact `UnifiedSearchResponse` shape. */
         BatchWebhookPayload: {
@@ -907,6 +931,8 @@ export interface components {
                 notFound?: number;
                 phonesFound?: number;
                 emailsFound?: number;
+                /** @description LinkedIn profiles billed (LinkedIn profile alone). */
+                linkedinProfilesFound?: number;
             };
             pricing?: {
                 priceInCents?: number;
@@ -1128,7 +1154,7 @@ export interface operations {
                         industry?: string;
                         website?: string;
                     }[];
-                    /** @description At least one of `searchPhone`, `searchProEmail` and `searchPersoEmail` must stay `true` (400 otherwise). */
+                    /** @description At least one of `searchPhone`, `searchProEmail`, `searchPersoEmail` and `searchLinkedin` must be `true` (400 otherwise). */
                     options?: {
                         /**
                          * @description **On by default**: with no `options`, found phones are delivered AND billed. Pass `false` for an email-only batch.
@@ -1139,6 +1165,11 @@ export interface operations {
                         searchProEmail?: boolean;
                         /** @default true */
                         searchPersoEmail?: boolean;
+                        /**
+                         * @description LinkedIn profile alone: URL, current job title and company (`linkedinUrl`, `jobTitle`, `company`), with the three other channels `false`. No phone or email search is run, billed per contact only when it adds something your input lacked. With a phone or an email requested, the LinkedIn profile is always delivered for free.
+                         * @default false
+                         */
+                        searchLinkedin?: boolean;
                         /**
                          * @description Also deliver SHARED company mailboxes (`contact@`, `info@`, `pharmacyX@…`) on top of named emails. Off by default (precision-first): enable only if establishment addresses are acceptable to you.
                          * @default false

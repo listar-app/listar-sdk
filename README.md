@@ -58,6 +58,16 @@ await listar.enrichPersonAndWait({
 });
 ```
 
+Every person result carries `linkedinProfile` (URL, current job title and company), free with a phone or email search. To get it alone, without any phone or email search (billed only when it tells something new):
+
+```ts
+const qualified = await listar.enrichPersonAndWait({
+  linkedinSlug: 'jane-doe-123',
+  enrichmentType: 'none',
+});
+// qualified.result.linkedinProfile → { url, jobTitle, company, observedAt, billable }
+```
+
 To avoid polling, pass a `callbackUrl`: Listar posts the `enrichment.completed` event when the result is ready (see [Webhooks](#webhooks)).
 
 ### Bulk
@@ -70,6 +80,7 @@ const batch = await listar.bulkEnrich({
     { ref: 'crm-1', firstName: 'Jane', lastName: 'Doe', company: 'Acme' },
     { ref: 'crm-2', linkedinSlug: 'john-smith-42' },
   ],
+  // each result also carries linkedinUrl, jobTitle and company, for free
   options: { searchPhone: true, searchProEmail: true },
   callbackUrl: 'https://example.com/webhooks/listar',
 });
