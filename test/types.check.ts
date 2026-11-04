@@ -22,4 +22,9 @@ export type Checks = [
   Assert<IsNever<C.CompanyContactsRequest>>,
   Assert<IsNever<C.CompanyContactsLaunched>>,
   Assert<IsNever<C.CompanyContactsResult>>,
+  Assert<IsNever<C.PeopleSearchRequest>>,
+  Assert<IsNever<C.PeopleSearchLaunched>>,
+  Assert<IsNever<C.PeopleSearchResult>>,
+  Assert<IsNever<C.PeopleSearchProgress>>,
+  Assert<IsNever<C.FoundPerson>>,
 ];

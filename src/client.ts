@@ -11,6 +11,7 @@ export type PaymentRequiredResult =
 export type CreditBalance = Schemas['CreditBalance'];
 export type CompanyContactsResult = Schemas['CompanyEnrichmentResult'];
 export type FoundCompany = Schemas['FoundCompany'];
+export type FoundPerson = Schemas['FoundPerson'];
 
 type JsonBody<Op> = Op extends {
   requestBody?: { content: { 'application/json': infer B } };
@@ -32,6 +33,8 @@ type ListApiKeysOp = paths['/api-keys']['get'];
 type CreateApiKeyOp = paths['/api-keys']['post'];
 type CompanyListOp = paths['/company-search']['post'];
 type CompanyListPollOp = paths['/company-search/{id}']['get'];
+type PeopleSearchOp = paths['/people-search']['post'];
+type PeopleSearchPollOp = paths['/people-search/{id}']['get'];
 type CompanyContactsOp = paths['/company-enrichment/search']['post'];
 type CompanyContactsPollOp = paths['/company-enrichment/search/{id}']['get'];
 
@@ -53,6 +56,11 @@ export type CompanyListRequest = JsonBody<CompanyListOp>;
 export type CompanyListLaunched = JsonResponse<CompanyListOp, 202>;
 export type CompanyListResult = JsonResponse<CompanyListPollOp, 200>;
 export type CompanyListProgress = JsonResponse<CompanyListPollOp, 202>;
+export type PeopleSearchRequest = JsonBody<PeopleSearchOp>;
+export type PeopleSearchLaunched = JsonResponse<PeopleSearchOp, 202>;
+/** A finished people search: `people`, and the `listId` they are saved in. */
+export type PeopleSearchResult = JsonResponse<PeopleSearchPollOp, 200>;
+export type PeopleSearchProgress = JsonResponse<PeopleSearchPollOp, 202>;
 export type CompanyContactsRequest = JsonBody<CompanyContactsOp>;
 export type CompanyContactsLaunched = JsonResponse<CompanyContactsOp, 202>;
 /** A finished company search: `result` holds the company and its contacts. */
@@ -96,7 +104,10 @@ export type CallOptions = {
 export type WaitOptions = {
   /** Delay between two polls. Defaults to 4 s, as the API recommends. */
   intervalMs?: number;
-  /** Gives up after this delay. Defaults to 5 min. */
+  /**
+   * Gives up after this delay. Defaults to 5 min, 25 min for a people search
+   * (a search of several hundred people can run for 20 min).
+   */
   timeoutMs?: number;
   signal?: AbortSignal;
 };
@@ -110,6 +121,13 @@ export class ListarError extends Error {
   readonly body: unknown;
   /** Seconds to wait before retrying, on a 429. */
   readonly retryAfter: number | undefined;
+  /**
+   * The search a `...AndWait` call launched, when it fails after the launch
+   * (wait timed out, credit short at settlement, search failed). The search
+   * may still complete and be billed: collect it with its `get...` method
+   * instead of launching it again.
+   */
+  searchId: string | undefined;
 
   constructor(
     message: string,
@@ -123,6 +141,7 @@ export class ListarError extends Error {
     this.status = status;
     this.body = body;
     this.retryAfter = retryAfter;
+    this.searchId = undefined;
   }
 }
 
@@ -133,6 +152,8 @@ const DEFAULT_BASE_URL = 'https://api.listar.fr';
 const DEFAULT_TIMEOUT_MS = 120_000;
 const DEFAULT_POLL_INTERVAL_MS = 4_000;
 const DEFAULT_WAIT_TIMEOUT_MS = 5 * 60_000;
+// Above the server's own run deadline (20 min) for a people search.
+const PEOPLE_SEARCH_WAIT_TIMEOUT_MS = 25 * 60_000;
 
 const sleep = (ms: number, signal?: AbortSignal) =>
   new Promise<void>((resolve, reject) => {
@@ -319,8 +340,12 @@ export class Listar {
    */
   async searchCompanies(
     request: CompanyListRequest,
+    options?: CallOptions,
   ): Promise<CompanyListLaunched> {
-    return this.json('POST', '/company-search', { body: request });
+    return this.json('POST', '/company-search', {
+      body: request,
+      signal: options?.signal,
+    });
   }
 
   async getCompanySearch(
@@ -338,13 +363,50 @@ export class Listar {
     request: CompanyListRequest,
     options?: WaitOptions,
   ): Promise<CompanyListResult> {
-    const { id } = await this.searchCompanies(request);
-    if (!id) throw new ListarError('Listar: no search id returned', 0, null);
-    const outcome = await this.poll(
-      () => this.getCompanySearch(id, { signal: options?.signal }),
+    return this.launchAndPoll(
+      () => this.searchCompanies(request, { signal: options?.signal }),
+      (id) => this.getCompanySearch(id, { signal: options?.signal }),
       options,
     );
-    return outcome.result as CompanyListResult;
+  }
+
+  /**
+   * Finds the people who hold a role, without knowing their company: by job
+   * title, countries, seniority, company size and industry, and how recently
+   * they took the job. Billed per person delivered; a search that finds
+   * nobody costs nothing. The people come without phone or email, saved in a
+   * list (`listId`) to enrich.
+   */
+  async searchPeople(
+    request: PeopleSearchRequest,
+    options?: CallOptions,
+  ): Promise<PeopleSearchLaunched> {
+    return this.json('POST', '/people-search', {
+      body: request,
+      signal: options?.signal,
+    });
+  }
+
+  async getPeopleSearch(
+    id: string,
+    options?: CallOptions,
+  ): Promise<PollOutcome<PeopleSearchResult, PeopleSearchProgress>> {
+    return this.pollOutcome(
+      await this.raw('GET', `/people-search/${encodeURIComponent(id)}`, {
+        signal: options?.signal,
+      }),
+    ) as PollOutcome<PeopleSearchResult, PeopleSearchProgress>;
+  }
+
+  async searchPeopleAndWait(
+    request: PeopleSearchRequest,
+    options?: WaitOptions,
+  ): Promise<PeopleSearchResult> {
+    return this.launchAndPoll(
+      () => this.searchPeople(request, { signal: options?.signal }),
+      (id) => this.getPeopleSearch(id, { signal: options?.signal }),
+      { timeoutMs: PEOPLE_SEARCH_WAIT_TIMEOUT_MS, ...options },
+    );
   }
 
   // Account
@@ -421,6 +483,27 @@ export class Listar {
     throw this.error(status, body);
   }
 
+  /**
+   * Launches a search and polls it to its result. An error after the launch
+   * carries the search id (`ListarError.searchId`): the search may still
+   * complete and be billed, and must be collected, not launched again.
+   */
+  private async launchAndPoll<Result>(
+    launch: () => Promise<{ id?: string }>,
+    check: (id: string) => Promise<PollOutcome<Result, unknown>>,
+    options?: WaitOptions,
+  ): Promise<Result> {
+    const { id } = await launch();
+    if (!id) throw new ListarError('Listar: no search id returned', 0, null);
+    try {
+      const outcome = await this.poll(() => check(id), options);
+      return outcome.result as Result;
+    } catch (error) {
+      if (error instanceof ListarError) error.searchId = id;
+      throw error;
+    }
+  }
+
   private async poll<T extends { status: string }>(
     check: () => Promise<T>,
     options: WaitOptions = {},
@@ -447,7 +530,11 @@ export class Listar {
   private async json<T>(
     method: string,
     path: string,
-    options?: { body?: unknown; query?: Record<string, unknown> },
+    options?: {
+      body?: unknown;
+      query?: Record<string, unknown>;
+      signal?: AbortSignal;
+    },
   ): Promise<T> {
     const { status, body } = await this.raw(method, path, options);
     if (status < 200 || status >= 300) throw this.error(status, body);

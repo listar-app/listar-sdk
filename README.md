@@ -103,6 +103,32 @@ const list = await listar.searchCompaniesAndWait({
 });
 ```
 
+## People by role
+
+```ts
+// Who holds a role, without knowing their company. Here: the heads of sales
+// who took their job in France over the last 2 months. Billed per person
+// delivered; they come without phone or email, saved in a list to enrich.
+const found = await listar.searchPeopleAndWait({
+  brief: 'Heads of sales who took their job in France over the last 2 months',
+  criteria: {
+    titles: [
+      'head of sales',
+      'sales director',
+      'directeur commercial',
+      'directrice commerciale',
+      'chief revenue officer',
+    ],
+    countries: ['France'],
+    startedWithinDays: 60,
+  },
+  target: 100,
+});
+console.log(found.delivered, found.listId);
+```
+
+A wait that fails after the launch (timed out, credit short at settlement) throws a `ListarError` carrying `searchId`: the search may still complete and be billed, so collect it with `getPeopleSearch(error.searchId)` instead of launching it again.
+
 ## Verification
 
 ```ts

@@ -138,6 +138,87 @@ describe('Listar client', () => {
     );
   });
 
+  it('launches a people search and polls it until the people come back', async () => {
+    const people = [{ fullName: 'Jane Doe', title: 'Head of Sales' }];
+    const { listar, calls } = client([
+      { status: 202, body: { success: true, id: 'p1', status: 'pending' } },
+      { status: 202, body: { success: true, id: 'p1', status: 'pending' } },
+      {
+        status: 200,
+        body: { success: true, id: 'p1', delivered: 1, listId: 'l1', people },
+      },
+    ]);
+    const result = await listar.searchPeopleAndWait(
+      {
+        brief: 'Heads of sales new in their job in France',
+        criteria: {
+          titles: ['head of sales'],
+          countries: ['France'],
+          startedWithinDays: 60,
+        },
+      },
+      { intervalMs: 1 },
+    );
+    expect(result).toMatchObject({ delivered: 1, listId: 'l1', people });
+    expect(calls[0].url).toBe('https://api.listar.fr/people-search');
+    expect(JSON.parse(String(calls[0].init.body))).toMatchObject({
+      criteria: { titles: ['head of sales'], startedWithinDays: 60 },
+    });
+    expect(calls[2].url).toBe('https://api.listar.fr/people-search/p1');
+  });
+
+  it('keeps the people search id when the settlement answers 402', async () => {
+    const { listar } = client([
+      { status: 202, body: { success: true, id: 'p2', status: 'pending' } },
+      { status: 402, body: { id: 'p2', message: 'Insufficient credit' } },
+    ]);
+    const error = await listar
+      .searchPeopleAndWait(
+        {
+          brief: 'Heads of sales in France',
+          criteria: { titles: ['head of sales'], countries: ['France'] },
+        },
+        { intervalMs: 1 },
+      )
+      .catch((e) => e);
+    expect(error).toBeInstanceOf(ListarError);
+    expect(error).toMatchObject({ status: 402, searchId: 'p2' });
+  });
+
+  it('keeps the people search id when the search failed', async () => {
+    const { listar } = client([
+      { status: 202, body: { success: true, id: 'p3', status: 'pending' } },
+      { status: 422, body: { id: 'p3', status: 'failed', message: 'failed' } },
+    ]);
+    const error = await listar
+      .searchPeopleAndWait(
+        {
+          brief: 'Heads of sales in France',
+          criteria: { titles: ['head of sales'], countries: ['France'] },
+        },
+        { intervalMs: 1 },
+      )
+      .catch((e) => e);
+    expect(error).toMatchObject({ status: 422, searchId: 'p3' });
+  });
+
+  it('passes the caller signal to the launch of a people search', async () => {
+    const { listar, calls } = client([
+      { status: 202, body: { success: true, id: 'p4', status: 'pending' } },
+    ]);
+    // Already cancelled: the launch request carries the cancellation.
+    const controller = new AbortController();
+    controller.abort();
+    await listar.searchPeople(
+      {
+        brief: 'Heads of sales in France',
+        criteria: { titles: ['head of sales'], countries: ['France'] },
+      },
+      { signal: controller.signal },
+    );
+    expect(calls[0].init.signal?.aborted).toBe(true);
+  });
+
   it('leaves retryAfter undefined when a 429 has no Retry-After', async () => {
     const { listar } = client([
       { status: 429, body: { message: 'Too many searches running' } },

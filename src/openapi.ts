@@ -280,6 +280,50 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/people-search": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Launch a people search
+         * @description Finds the people who hold a role, by **title**, **place**, seniority, industry and size of their company, and **time in the job** ("the new heads of sales in France over the last 2 months"). Every profile is checked (current job, start date, country), then a judge keeps only the people who really hold the role.
+         *
+         *     Returns `202` with an `id`; get the result via `GET /people-search/{id}`. Billed **5 ct per delivered person** when the search ends, volume discount applied; a search that finds nobody costs nothing. Immediate `402` if the credit cannot cover the maximum cost (`target` × price).
+         *
+         *     The people delivered are saved in a **list** (`listId`): `POST /lists/{id}/enrich` then finds their mobile and email. A few hundred people take a few minutes.
+         */
+        post: operations["launchPeopleSearch"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/people-search/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get a people search (polling)
+         * @description Poll the result. Loop while the status is `202`. The first call after it ends settles the credit on what was delivered and saves the people in a list.
+         */
+        get: operations["getPeopleSearch"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/company-enrichment/search": {
         parameters: {
             query?: never;
@@ -753,6 +797,11 @@ export interface components {
             /** @example true */
             hasEmail?: boolean;
             /**
+             * @description LinkedIn profile billed: only for a search of the LinkedIn profile alone (`enrichmentType: none`).
+             * @example false
+             */
+            hasLinkedin?: boolean;
+            /**
              * @example [
              *       {
              *         "type": "phone",
@@ -770,7 +819,7 @@ export interface components {
              */
             breakdown?: {
                 /** @enum {string} */
-                type?: "phone" | "email";
+                type?: "phone" | "email" | "linkedin";
                 label?: string;
                 basePriceCents?: number;
                 priceCents?: number;
@@ -962,6 +1011,75 @@ export interface components {
             validated?: boolean;
             /** @example 92 */
             confidence?: number;
+        };
+        /** @description The same brief as filters. Titles and at least one country are required. */
+        PeopleSearchCriteria: {
+            /**
+             * @description Every form of the title to find. Each one is matched as whole words inside the title, with no gender folding and no translation: give the French AND English forms, both genders and the acronyms.
+             * @example [
+             *       "head of sales",
+             *       "sales director",
+             *       "directeur commercial",
+             *       "directrice commerciale",
+             *       "chief revenue officer"
+             *     ]
+             */
+            titles: string[];
+            /**
+             * @description Words that rule a title out.
+             * @example [
+             *       "assistant",
+             *       "assistante",
+             *       "stagiaire"
+             *     ]
+             */
+            excludeTitles?: string[];
+            seniorities?: ("Owner" | "C-Level" | "VP" | "Director" | "Head" | "Manager" | "Senior")[];
+            /**
+             * @description Countries of the people, checked on each one.
+             * @example [
+             *       "France"
+             *     ]
+             */
+            countries: string[];
+            /** @description Cities to narrow the search to, within the countries. */
+            cities?: string[];
+            /**
+             * @description Only the people who took their current job at most this many days ago. Start dates are known to the month: the month the window opens in counts whole.
+             * @example 60
+             */
+            startedWithinDays?: number;
+            /** @description Industries of their current company, in English. */
+            industries?: string[];
+            employeesMin?: number;
+            employeesMax?: number;
+        };
+        /** @description One person delivered by a people search: identity, current job and LinkedIn profile, never a phone or an email. */
+        FoundPerson: {
+            fullName?: string;
+            firstName?: string;
+            lastName?: string;
+            title?: string;
+            seniority?: string;
+            company?: string;
+            companyDomain?: string;
+            companyLinkedinUrl?: string;
+            industry?: string;
+            employees?: number;
+            employeesRange?: string;
+            city?: string;
+            region?: string;
+            country?: string;
+            linkedinUrl?: string;
+            /**
+             * @description Month the current job started, `YYYY-MM`.
+             * @example 2026-09
+             */
+            startedAt?: string;
+            /** @description Days since the job started (from the 1st of its month). */
+            daysInRole?: number;
+            matchScore?: number;
+            matchReason?: string;
         };
         /** @description One company delivered by a list search. Which fields are present depends on the sources that found it (`sources`). */
         FoundCompany: {
@@ -2119,6 +2237,170 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Search failed. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @example false */
+                        success?: boolean;
+                        id?: string;
+                        /** @example failed */
+                        status?: string;
+                        message?: string;
+                    };
+                };
+            };
+        };
+    };
+    launchPeopleSearch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /**
+                     * @description Who you are looking for, in plain words. The judge reads it to keep only the people who really hold the role.
+                     * @example Les nouveaux directeurs commerciaux en France sur les 2 derniers mois
+                     */
+                    brief: string;
+                    criteria: components["schemas"]["PeopleSearchCriteria"];
+                    /**
+                     * @description How many people to deliver.
+                     * @default 50
+                     */
+                    target?: number;
+                };
+            };
+        };
+        responses: {
+            /** @description Search launched. */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        success?: boolean;
+                        id?: string;
+                        /** @example pending */
+                        status?: string;
+                        target?: number;
+                        maxTarget?: number;
+                        estimatedMaxCostCents?: number;
+                        message?: string;
+                    };
+                };
+            };
+            /** @description Missing titles or countries, invalid criteria. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Credit does not cover the maximum cost. */
+            402: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Too many searches running for this account. */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    getPeopleSearch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description ID returned by POST /people-search. */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description People delivered and settled. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        success?: boolean;
+                        id?: string;
+                        /** @example completed */
+                        status?: string;
+                        brief?: string;
+                        criteria?: components["schemas"]["PeopleSearchCriteria"];
+                        target?: number;
+                        delivered?: number;
+                        /** @description Profiles matching the filters before our checks (indicative). */
+                        totalAvailable?: number;
+                        /** @description The source ran dry before reaching `target`. */
+                        exhausted?: boolean;
+                        /**
+                         * @description Why the search stopped. Only `exhausted` means there is nobody else; `low_yield`: almost no profile matched the role, refine the titles.
+                         * @enum {string}
+                         */
+                        stopReason?: "target" | "exhausted" | "low_yield" | "budget" | "deadline" | "source_failed";
+                        /** @description The source stopped on an error. Present only then: a short list is NOT an empty market. */
+                        sourceFailed?: boolean;
+                        costCents?: number;
+                        /** @description List the people are saved in: `POST /lists/{id}/enrich` finds their mobile and email. */
+                        listId?: string;
+                        people?: components["schemas"]["FoundPerson"][];
+                    };
+                };
+            };
+            /** @description Search in progress. `delivered` grows while it runs. */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        success?: boolean;
+                        id?: string;
+                        /** @example pending */
+                        status?: string;
+                        delivered?: number;
+                        target?: number;
+                    };
+                };
+            };
+            /** @description Credit does not cover what was delivered. */
+            402: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @description The search, to read again after a top-up: the people found are kept. */
+                        id?: string;
+                    };
+                };
             };
             /** @description Not found. */
             404: {
