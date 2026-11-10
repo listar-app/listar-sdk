@@ -95,7 +95,7 @@ export interface paths {
         put?: never;
         /**
          * Verify emails
-         * @description Checks the deliverability of 1 to 10 emails. **Billed 1 cent per email** for API-key calls. Returns `402` if credit is insufficient.
+         * @description Checks the deliverability of 1 to 10 emails. **Billed 1 cent per distinct email** for API-key calls (an address sent twice, case aside, is checked and billed once). `verifiedAt` is when the verdict was reached, up to 90 days ago for `verified` / `invalid`, 365 for `unknown`. Returns `402` if credit is insufficient.
          */
         post: operations["verifyEmails"];
         delete?: never;
@@ -247,7 +247,7 @@ export interface paths {
         put?: never;
         /**
          * Launch a company list search
-         * @description Builds a **list** of companies from a natural-language brief plus criteria. Sources are drained cheapest first (registers and indexes, then a paid provider, then the open web) and every batch goes through a relevance judge: only the companies it keeps are delivered.
+         * @description Builds a **list** of companies from a natural-language brief plus criteria. Several sources are searched and every batch goes through a relevance judge: only the companies it keeps are delivered.
          *
          *     Returns `202` with an `id`; get the result via `GET /company-search/{id}`. Billed **2 ct per delivered company** when the search ends, volume discount applied; a brief that matches nothing costs nothing. Immediate `402` if the credit cannot cover the maximum cost (`target` × price).
          *
@@ -567,7 +567,7 @@ export interface components {
             linkedinSlug?: string;
             facebookSlug?: string;
             facebookId?: string;
-            /** @description Doctolib profile path (`<specialty>/<city>/<name>`, e.g. `medecin-generaliste/paris/jean-dupont`) or full profile URL. Its portrait is used as the face-match REFERENCE photo. */
+            /** @description Doctolib profile path (`<specialty>/<city>/<name>`, e.g. `medecin-generaliste/paris/jean-dupont`) or full profile URL. A strong identifier of the person. */
             doctolibSlug?: string;
             maltSlug?: string;
             company?: string;
@@ -604,7 +604,7 @@ export interface components {
              */
             searchPersoEmail?: boolean;
             /**
-             * @description Deliver (and bill) a PERSONAL email only on PROOF of ownership: a face match between the account picture (Gravatar / GitHub / Google / Teams) and the contact's reference portrait, or an anchor identifying the person themselves (RPPS, supplied LinkedIn slug, shared input email or phone). A personal address is tied to neither a company nor a city: without this option it can be delivered on a mere corroboration of the person's surroundings. **Off by default** (opt-in) - enabling it reduces the volume of personal emails delivered.
+             * @description Deliver (and bill) a PERSONAL email only on PROOF that it belongs to the person themselves, not to their surroundings. A personal address is tied to neither a company nor a city: without this option it can be delivered on a mere corroboration of the person's surroundings. **Off by default** (opt-in) - enabling it reduces the volume of personal emails delivered.
              * @default false
              */
             requirePersonalEmailProof?: boolean;
@@ -629,18 +629,13 @@ export interface components {
              */
             respondAsync?: boolean;
         };
-        /** @description Face comparison result (identity validation). */
-        FaceMatch: {
-            isMatch?: boolean;
-            /** @enum {string} */
-            confidence?: "high" | "medium" | "low";
-        } | null;
         PhoneInfo: {
             /** @example +33612345678 */
             number?: string;
             /** @enum {string} */
             type?: "mobile" | "fixed" | "special" | "unknown";
-            verified?: boolean | null;
+            /** @description `true` when the number is formally proven to be the person's. `false` is the usual case and is no doubt: the number is delivered as the person's, only without that formal proof. */
+            verified?: boolean;
             /** Format: date-time */
             verifiedAt?: string | null;
             /** @description Operator ARCEP assigned the number block to (French mobiles only, `null` elsewhere). Not the current operator of a ported number. */
@@ -656,8 +651,6 @@ export interface components {
              * @example false
              */
             isWhatsAppBusiness?: boolean | null;
-            /** @description Display name on WhatsApp. */
-            pushname?: string | null;
             /**
              * @description Likely use of the line: professional or personal. `unknown` when evidence is missing or conflicting; absent when the analysis did not run.
              * @enum {string}
@@ -668,7 +661,6 @@ export interface components {
              * @enum {string|null}
              */
             usageConfidence?: "high" | "medium" | "low" | null;
-            faceMatch?: components["schemas"]["FaceMatch"];
         };
         EmailInfo: {
             /** Format: email */
@@ -770,7 +762,7 @@ export interface components {
              */
             pendingLinkedin?: boolean;
             /**
-             * @description Async enrichment provider in progress.
+             * @description Enrichment still in progress.
              * @example true
              */
             pendingAsyncProvider?: boolean;
@@ -930,7 +922,10 @@ export interface components {
              */
             status?: "success" | "partial" | "not_found" | "pending" | "excluded";
             phone?: string | null;
-            /** @enum {string|null} */
+            /**
+             * @description `verified` when the number is formally proven to be the person's. `not_verified` is the usual case and is no doubt: the number is delivered as the person's, only without that formal proof.
+             * @enum {string|null}
+             */
             phoneStatus?: "verified" | "not_verified" | null;
             /**
              * @description Likely use of the phone: professional or personal line. Absent when evidence is missing or conflicting.
@@ -938,7 +933,7 @@ export interface components {
              */
             phoneUsage?: "professional" | "personal" | null;
             /**
-             * @description Confidence in `phoneUsage`. `low` = likely verdict (a single moderate clue, or a WhatsApp Business account with nothing else).
+             * @description Confidence in `phoneUsage`. `low` = likely verdict (a single moderate clue).
              * @enum {string|null}
              */
             phoneUsageConfidence?: "high" | "medium" | "low" | null;
@@ -1095,6 +1090,15 @@ export interface components {
             /** @description Headcount bucket when the exact figure is unknown ("11-50"). */
             employeesRange?: string;
             revenueUsd?: number;
+            /** @description Revenue in euros from the published French annual accounts. */
+            revenueEur?: number;
+            /** @description Financial year of revenueEur. */
+            revenueYear?: number;
+            /**
+             * @description company: the company’s own figure. group: its group’s consolidated figure, when it published no own one.
+             * @enum {string}
+             */
+            revenueScope?: "company" | "group";
             revenueRange?: string;
             totalFundingUsd?: number;
             lastFundingAmountUsd?: number;
@@ -1133,6 +1137,11 @@ export interface components {
             industry?: string | null;
             /** @example 25 */
             employees?: number | null;
+            /**
+             * @description LinkedIn headcount band when the exact figure is unknown.
+             * @example 201-500
+             */
+            employeesRange?: string | null;
             /** @example 2500000 */
             revenue?: number | null;
             /** @example 2015 */
@@ -1152,7 +1161,7 @@ export interface components {
              * @example 2
              */
             establishmentsCount?: number | null;
-            /** @description Sectors from the firmographics provider (a different vocabulary from `apeLabel`). */
+            /** @description Business sectors (a different vocabulary from `apeLabel`). */
             industries?: string[] | null;
             technologies?: string[] | null;
             website?: string | null;
@@ -1265,7 +1274,7 @@ export interface operations {
                         phone?: string;
                         linkedinUrl?: string;
                         linkedinSlug?: string;
-                        /** @description Doctolib profile path (`<specialty>/<city>/<name>`, e.g. `medecin-generaliste/paris/jean-dupont`) or full profile URL. Its portrait is used as the face-match REFERENCE photo - often the only anchor available for a self-employed practitioner with no LinkedIn. Its specialty also serves as anti-homonym context when `jobTitle` is missing. */
+                        /** @description Doctolib profile path (`<specialty>/<city>/<name>`, e.g. `medecin-generaliste/paris/jean-dupont`) or full profile URL. A strong identifier - often the only one available for a self-employed practitioner with no LinkedIn. Its specialty also serves as anti-homonym context when `jobTitle` is missing. */
                         doctolibSlug?: string;
                         /** @description National RPPS identifier (11 digits). STRONG ANCHOR: an official-registry record sharing this RPPS identifies the person with no namesake ambiguity. */
                         rppsId?: string;
@@ -1299,7 +1308,7 @@ export interface operations {
                          */
                         acceptGeoExactUnique?: boolean;
                         /**
-                         * @description Deliver (and bill) a PERSONAL email only on PROOF of ownership: a face match between the account picture (Gravatar / GitHub / Google / Teams) and the contact's reference portrait, or an anchor identifying the person themselves (RPPS, supplied LinkedIn slug, shared input email or phone). A personal address is tied to neither a company nor a city: without this option it can be delivered on a mere corroboration of the person's surroundings. **Off by default** (opt-in) - enabling it reduces the volume of personal emails delivered.
+                         * @description Deliver (and bill) a PERSONAL email only on PROOF that it belongs to the person themselves, not to their surroundings. A personal address is tied to neither a company nor a city: without this option it can be delivered on a mere corroboration of the person's surroundings. **Off by default** (opt-in) - enabling it reduces the volume of personal emails delivered.
                          * @default false
                          */
                         requirePersonalEmailProof?: boolean;
@@ -2114,8 +2123,10 @@ export interface operations {
                         /** @description French postal code prefixes ("69", "75"). */
                         zipcodePrefixes?: string[];
                         worldwide?: boolean;
+                        /** @description Headcount bounds, only when size matters: in France a company is sized by its INSEE headcount bracket, and a bound leaves out those without one. */
                         employeesMin?: number;
                         employeesMax?: number;
+                        /** @description Revenue bounds in US dollars (5M EUR is about 5,400,000). In France, checked against the published annual accounts. */
                         revenueMinUsd?: number;
                         revenueMaxUsd?: number;
                         foundedAfter?: number;
