@@ -84,6 +84,34 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/search/feedback": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Report wrong data
+         * @description Rates a delivered result: a search (`id` from `POST /search/unified`) or a bulk row (`id` of an item of `results` in the `batch_enrichment.completed` webhook). **Free.**
+         *
+         *     With `rating: "negative"` and a reason that disputes a phone (`wrong_phone`, `wrong_person`) or an email (`wrong_email`, `email_bounced`, `wrong_person`), the values concerned are never delivered nor billed to you again for that person (same LinkedIn profile, or same first name, last name and company), for a year, whatever the channel (single, bulk, list). Those are the values named in `phones` / `emails`, or, when none is named, every phone (or email) this result delivered. Numbers are compared in E.164: `06 46 35 47 59` and `+33646354759` are the same number.
+         *
+         *     `wrong_person` says the delivered profile is someone else: its data stays deliverable when that other person is the one you search.
+         *
+         *     A second negative report on the same result adds to the first (reasons and values add up). A `positive` rating replaces the previous reports, and so lifts the exclusion.
+         *
+         *     A report holds for your account (your organization) only; the Listar team reviews them to fix the data.
+         */
+        post: operations["reportResult"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/search/verify-emails": {
         parameters: {
             query?: never;
@@ -912,6 +940,8 @@ export interface components {
         };
         /** @description A single enriched contact from the batch. **Flat** shape (like the CSV export columns) - NO `bestPhone`/`bestEmail` and no `profiles[]` (those belong to the single-contact `enrichment.completed` webhook). */
         BatchContactResult: {
+            /** @description Listar id of the row. Name it in `POST /search/feedback` to report a wrong phone or email. */
+            id?: string;
             /** @description Your identifier, echoed back as-is. */
             ref?: string;
             /** @description The contact fields as submitted. */
@@ -1483,6 +1513,85 @@ export interface operations {
             };
             /** @description Enrichment still in progress. */
             425: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    reportResult: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                /**
+                 * @example {
+                 *       "id": "6a1f3c9e2b7d4a0012ab34cd",
+                 *       "rating": "negative",
+                 *       "reasons": [
+                 *         "wrong_phone"
+                 *       ],
+                 *       "phones": [
+                 *         "+33646354759"
+                 *       ],
+                 *       "freeText": "The person who answered is someone else."
+                 *     }
+                 */
+                "application/json": {
+                    /** @description ID of the search, or of a bulk row. */
+                    id: string;
+                    /**
+                     * @deprecated
+                     * @description Legacy name of `id`. Send one or the other, not both.
+                     */
+                    searchResultId?: string;
+                    /** @enum {string} */
+                    rating: "positive" | "negative";
+                    /** @description Required when `rating` is `negative`. `wrong_phone` / `wrong_email`: the data belongs to someone else. `email_bounced`: the email bounced. `wrong_person`: the delivered profile is not the person searched (covers their phones and emails). `wrong_company`, `left_company`, `outdated_info`: passed to the team, nothing excluded. */
+                    reasons?: ("wrong_person" | "wrong_phone" | "wrong_email" | "outdated_info" | "email_bounced" | "wrong_company" | "left_company")[];
+                    /** @description The wrong numbers, any format. Read only with `wrong_phone` or `wrong_person`. Absent: every phone this result delivered. */
+                    phones?: string[];
+                    /** @description The wrong emails. Read only with `wrong_email`, `email_bounced` or `wrong_person`. Absent: every email this result delivered. */
+                    emails?: string[];
+                    /** @description Details for the team (bounce message, who answered…). */
+                    freeText?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Report saved. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @example true */
+                        success?: boolean;
+                    };
+                };
+            };
+            /** @description Invalid request: `id` missing or malformed, both `id` and `searchResultId`, negative rating without a reason, unknown reason. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Result not found, or not your account’s. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description The result is being rated by another call at the same moment: retry. Or the row belongs to a run without a paying account. */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };

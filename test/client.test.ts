@@ -307,6 +307,43 @@ describe('Listar client', () => {
     );
   });
 
+  it('reports a wrong number on a result', async () => {
+    const { listar, calls } = client([
+      { status: 200, body: { success: true } },
+    ]);
+    await expect(
+      listar.reportResult({
+        id: '6a1f3c9e2b7d4a0012ab34cd',
+        rating: 'negative',
+        reasons: ['wrong_phone'],
+        phones: ['06 46 35 47 59'],
+      }),
+    ).resolves.toBeUndefined();
+    expect(calls[0].url).toBe('https://api.listar.fr/search/feedback');
+    expect(calls[0].init.method).toBe('POST');
+    expect(JSON.parse(calls[0].init.body as string)).toEqual({
+      id: '6a1f3c9e2b7d4a0012ab34cd',
+      rating: 'negative',
+      reasons: ['wrong_phone'],
+      phones: ['06 46 35 47 59'],
+    });
+  });
+
+  it('throws a ListarError for a result that is not the account', async () => {
+    const { listar } = client([
+      { status: 404, body: { success: false, error: 'Search not found' } },
+    ]);
+    const error = await listar
+      .reportResult({
+        id: '6a1f3c9e2b7d4a0012ab34cd',
+        rating: 'negative',
+        reasons: ['email_bounced'],
+      })
+      .catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(ListarError);
+    expect((error as ListarError).status).toBe(404);
+  });
+
   it('requires an API key', () => {
     expect(() => new Listar({ apiKey: '' })).toThrow(/API key/);
   });

@@ -86,6 +86,27 @@ const batch = await listar.bulkEnrich({
 });
 ```
 
+### Wrong data
+
+A phone that is someone else's, an email that bounces: report it with the result `id` (a person search, or a bulk row). For a year, those values are never delivered nor billed to you again for that person, so searching again returns another number if one exists, and bills only that new one. A later `positive` rating of the same result lifts the exclusion.
+
+```ts
+const outcome = await listar.enrichPersonAndWait({
+  linkedinSlug: 'jane-doe-123',
+});
+if (outcome.status === 'completed' && outcome.id) {
+  await listar.reportResult({
+    id: outcome.id, // or the `id` of a bulk row
+    rating: 'negative',
+    reasons: ['wrong_phone'],
+    phones: ['+33646354759'],
+  });
+  const again = await listar.enrichPersonAndWait({
+    linkedinSlug: 'jane-doe-123',
+  });
+}
+```
+
 ## Companies
 
 ```ts

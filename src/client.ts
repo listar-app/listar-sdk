@@ -25,6 +25,7 @@ type JsonResponse<Op, Status extends number> = Op extends {
   : never;
 
 type BulkOp = paths['/search/bulk']['post'];
+type ReportResultOp = paths['/search/feedback']['post'];
 type VerifyEmailsOp = paths['/search/verify-emails']['post'];
 type VerifyWhatsappOp = paths['/search/verify-whatsapp']['post'];
 type VerifyPhoneOwnershipOp = paths['/search/verify-phone-ownership']['post'];
@@ -40,6 +41,11 @@ type CompanyContactsPollOp = paths['/company-enrichment/search/{id}']['get'];
 
 export type BulkEnrichRequest = JsonBody<BulkOp>;
 export type BulkEnrichAccepted = JsonResponse<BulkOp, 202>;
+/** `searchResultId` is the legacy name of `id`: the API refuses both at once. */
+export type ReportResultRequest = Omit<
+  JsonBody<ReportResultOp>,
+  'searchResultId'
+>;
 export type VerifyEmailsResult = JsonResponse<VerifyEmailsOp, 200>;
 export type VerifyWhatsappRequest = JsonBody<VerifyWhatsappOp>;
 export type VerifyWhatsappResult = JsonResponse<VerifyWhatsappOp, 200>;
@@ -268,6 +274,24 @@ export class Listar {
    */
   async bulkEnrich(request: BulkEnrichRequest): Promise<BulkEnrichAccepted> {
     return this.json('POST', '/search/bulk', { body: request });
+  }
+
+  /**
+   * Reports a wrong phone or email on a delivered result: a person search
+   * (its `id`) or a bulk row (the `id` of a `batch_enrichment.completed`
+   * result). The values named, or every value of the channel when none is,
+   * are never delivered nor billed again to this account for that person,
+   * for a year: search again to get another one, if one exists. A later
+   * `positive` rating of the same result lifts the exclusion. Free.
+   */
+  async reportResult(
+    request: ReportResultRequest,
+    options?: CallOptions,
+  ): Promise<void> {
+    await this.json('POST', '/search/feedback', {
+      body: request,
+      signal: options?.signal,
+    });
   }
 
   // Verification
