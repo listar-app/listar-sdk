@@ -95,9 +95,9 @@ export interface paths {
         put?: never;
         /**
          * Report wrong data
-         * @description Rates a delivered result: a search (`id` from `POST /search/unified`) or a bulk row (`id` of an item of `results` in the `batch_enrichment.completed` webhook). **Free.**
+         * @description Rates a delivered result: a search (`id` from `POST /search/unified`) or a bulk row (`id` of an item of `results` in the `batch_enrichment.completed` webhook). **Free.** A result not paid yet cannot be rated (`409`).
          *
-         *     With `rating: "negative"` and a reason that disputes a phone (`wrong_phone`, `wrong_person`) or an email (`wrong_email`, `email_bounced`, `wrong_person`), the values concerned are never delivered nor billed to you again for that person (same LinkedIn profile, or same first name, last name and company), for a year, whatever the channel (single, bulk, list). Those are the values named in `phones` / `emails`, or, when none is named, every phone (or email) this result delivered. Numbers are compared in E.164: `06 46 35 47 59` and `+33646354759` are the same number.
+         *     With `rating: "negative"` and a reason that disputes a phone (`wrong_phone`, `wrong_person`) or an email (`wrong_email`, `email_bounced`, `wrong_person`), the values concerned are not delivered nor billed to you again for that person (same LinkedIn profile, or same first name, last name and company), for good (a year for an email reported with `email_bounced`, as a bounce may be temporary), whatever the channel (single, bulk, list). Those are the values named in `phones` / `emails`, among those this result delivered (any other value is refused with a `400`), or, when none is named, every phone (or email) this result delivered. Numbers are compared in E.164: `06 46 35 47 59` and `+33646354759` are the same number.
          *
          *     `wrong_person` says the delivered profile is someone else: its data stays deliverable when that other person is the one you search.
          *
@@ -394,50 +394,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-}
-export interface webhooks {
-    "enrichment.completed": {
+    "/webhooks/subscriptions": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /** List the key’s webhook subscriptions */
+        get: operations["listWebhookSubscriptions"];
         put?: never;
         /**
-         * Webhook: enrichment.completed
-         * @description Sent to your `callbackUrl` when an async enrichment completes. Header `X-Listar-Signature: t=<ts>,v1=<hmac_sha256>`. Respond 2xx to acknowledge.
+         * Subscribe a URL to the completion webhooks
+         * @description REST hooks: subscribes an https URL to the chosen events for the calling API key. Searches that key then launches without a `callbackUrl` are delivered to its subscription to the matching event (same `X-Listar-Signature` signature, same retries). Searches from the web app or another key never are. Several subscriptions to one event each receive the completion (one Zap or scenario per subscription), with the same signed body; a retry only goes to the URLs that did not acknowledge. The keys one user holds from one OAuth client (Make, Zapier) in the organization share their subscriptions, which therefore survive a reauthorization. At most 20 subscriptions; they are deleted once none of those keys is live any more.
          */
-        post: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path?: never;
-                cookie?: never;
-            };
-            requestBody?: {
-                content: {
-                    "application/json": components["schemas"]["WebhookPayload"];
-                };
-            };
-            responses: {
-                /** @description Acknowledgement. */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content?: never;
-                };
-            };
-        };
+        post: operations["subscribeWebhook"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "company_enrichment.completed": {
+    "/webhooks/subscriptions/{id}": {
         parameters: {
             query?: never;
             header?: never;
@@ -446,73 +424,28 @@ export interface webhooks {
         };
         get?: never;
         put?: never;
-        /**
-         * Webhook: company_enrichment.completed
-         * @description Sent to your `callbackUrl` when an async company search completes. Header `X-Listar-Signature`. Respond 2xx.
-         */
-        post: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path?: never;
-                cookie?: never;
-            };
-            requestBody?: {
-                content: {
-                    "application/json": components["schemas"]["CompanyWebhookPayload"];
-                };
-            };
-            responses: {
-                /** @description Acknowledgement. */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content?: never;
-                };
-            };
-        };
-        delete?: never;
+        post?: never;
+        /** Delete a webhook subscription */
+        delete: operations["unsubscribeWebhook"];
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "batch_enrichment.completed": {
+    "/webhooks/samples": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        get?: never;
-        put?: never;
         /**
-         * Webhook: batch_enrichment.completed
-         * @description Sent to your `callbackUrl` when a batch (POST /search/bulk) completes. The full result is embedded in `results[]` (one object per contact, flat shape - no `bestPhone`/`bestEmail`). Header `X-Listar-Signature: t=<ts>,v1=<hmac_sha256>`. Respond 2xx to acknowledge.
+         * Last payloads of a webhook event
+         * @description The last payloads delivered by webhook for your own API searches on `event`, most recent first, built like a real delivery (a batch keeps its first 3 rows). Never a search of another member or of the web app. Serves as sample data for automation platforms to map a trigger’s fields. Empty list before the first finished search.
          */
-        post: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path?: never;
-                cookie?: never;
-            };
-            requestBody?: {
-                content: {
-                    "application/json": components["schemas"]["BatchWebhookPayload"];
-                };
-            };
-            responses: {
-                /** @description Acknowledgement. */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content?: never;
-                };
-            };
-        };
+        get: operations["listWebhookSamples"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -577,6 +510,140 @@ export interface webhooks {
         trace?: never;
     };
 }
+export interface webhooks {
+    "enrichment.completed": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Webhook: enrichment.completed
+         * @description Sent to your `callbackUrl`, or failing that to each of the calling key’s subscriptions (POST /webhooks/subscriptions), when an async enrichment completes. Header `X-Listar-Signature: t=<ts>,v1=<hmac_sha256>`. Respond 2xx to acknowledge.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description HMAC-SHA256 signature of `<ts>.<raw body>` with the organization secret (GET /webhooks/signing-secret). */
+                    "X-Listar-Signature": string;
+                };
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["WebhookPayload"];
+                };
+            };
+            responses: {
+                /** @description Acknowledgement. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "company_enrichment.completed": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Webhook: company_enrichment.completed
+         * @description Sent to your `callbackUrl`, or failing that to each of the calling key’s subscriptions (POST /webhooks/subscriptions), when an async company search completes. Header `X-Listar-Signature`. Respond 2xx.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description HMAC-SHA256 signature of `<ts>.<raw body>` with the organization secret (GET /webhooks/signing-secret). */
+                    "X-Listar-Signature": string;
+                };
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["CompanyWebhookPayload"];
+                };
+            };
+            responses: {
+                /** @description Acknowledgement. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "batch_enrichment.completed": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Webhook: batch_enrichment.completed
+         * @description Sent to your `callbackUrl`, or failing that to each of the calling key’s subscriptions (POST /webhooks/subscriptions), when a batch (POST /search/bulk) completes. The full result is embedded in `results[]` (one object per contact, flat shape - no `bestPhone`/`bestEmail`). Header `X-Listar-Signature: t=<ts>,v1=<hmac_sha256>`. Respond 2xx to acknowledge.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description HMAC-SHA256 signature of `<ts>.<raw body>` with the organization secret (GET /webhooks/signing-secret). */
+                    "X-Listar-Signature": string;
+                };
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["BatchWebhookPayload"];
+                };
+            };
+            responses: {
+                /** @description Acknowledgement. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+}
 export interface components {
     schemas: {
         Error: {
@@ -591,7 +658,7 @@ export interface components {
             email?: string;
             /** @description Lenient format: `+33 6 12 34 56 78`, `0612345678`… */
             phone?: string;
-            /** @description LinkedIn profile slug (the part after /in/). */
+            /** @description LinkedIn profile slug (the part after /in/), or the profile URL, read down to its slug. */
             linkedinSlug?: string;
             facebookSlug?: string;
             facebookId?: string;
@@ -648,11 +715,11 @@ export interface components {
             acceptGeoExactUnique?: boolean;
             /**
              * Format: uri
-             * @description HTTPS URL notified (POST `enrichment.completed`, HMAC-signed) when an async enrichment completes. Recommended to avoid polling.
+             * @description HTTPS URL notified (POST `enrichment.completed`, HMAC-signed) when an async enrichment completes. Recommended to avoid polling. When absent, the calling key’s subscriptions to that event apply (POST /webhooks/subscriptions).
              */
             callbackUrl?: string;
             /**
-             * @description Answers `202` with the `id` at once, without waiting for the result. Useful to launch many searches in a row and collect them afterwards via `GET /search/results/{id}` (or by webhook). Same billing.
+             * @description Answers `202` with the `id` at once, without waiting for the result. Useful to launch many searches in a row and collect them afterwards via `GET /search/results/{id}` (or by webhook). With a `callbackUrl`, every accepted search ends with a webhook, an immediate result included. Same billing.
              * @default false
              */
             respondAsync?: boolean;
@@ -987,6 +1054,14 @@ export interface components {
              */
             positionObservedAt?: string | null;
         };
+        WebhookSubscription: {
+            id?: string;
+            /** Format: uri */
+            url?: string;
+            events?: string[];
+            /** Format: date-time */
+            createdAt?: string;
+        };
         /** @description POST body sent to your callbackUrl when a batch (POST /search/bulk) completes. The result is flattened per contact (`results[]`), not the single-contact `UnifiedSearchResponse` shape. */
         BatchWebhookPayload: {
             /** @enum {string} */
@@ -1211,11 +1286,13 @@ export interface components {
             event?: "company_enrichment.completed";
             id?: string;
             /**
-             * @description `completed` → result populated. `pending_payment` → result null, credit was insufficient.
+             * @description `completed` → result populated. `pending_payment` → result null, credit was insufficient. `failed` → result null, the search failed (nothing is billed).
              * @enum {string}
              */
-            status?: "completed" | "pending_payment";
+            status?: "completed" | "pending_payment" | "failed";
             result?: components["schemas"]["CompanyEnrichmentResult"] | null;
+            /** @description Present when `status` is `failed`. */
+            error?: string;
             /** Format: date-time */
             completedAt?: string;
         };
@@ -1345,9 +1422,9 @@ export interface operations {
                     };
                     /**
                      * Format: uri
-                     * @description https URL notified when the batch completes (signed webhook). **Required** - the only result-delivery channel.
+                     * @description https URL notified when the batch completes (signed webhook), the only result-delivery channel. **Required**, unless the calling key subscribed to `batch_enrichment.completed` (POST /webhooks/subscriptions).
                      */
-                    callbackUrl: string;
+                    callbackUrl?: string;
                 };
             };
         };
@@ -1554,9 +1631,9 @@ export interface operations {
                     rating: "positive" | "negative";
                     /** @description Required when `rating` is `negative`. `wrong_phone` / `wrong_email`: the data belongs to someone else. `email_bounced`: the email bounced. `wrong_person`: the delivered profile is not the person searched (covers their phones and emails). `wrong_company`, `left_company`, `outdated_info`: passed to the team, nothing excluded. */
                     reasons?: ("wrong_person" | "wrong_phone" | "wrong_email" | "outdated_info" | "email_bounced" | "wrong_company" | "left_company")[];
-                    /** @description The wrong numbers, any format. Read only with `wrong_phone` or `wrong_person`. Absent: every phone this result delivered. */
+                    /** @description The wrong numbers, any format, among those this result delivered. Read only with `wrong_phone` or `wrong_person`. Absent: every phone this result delivered. */
                     phones?: string[];
-                    /** @description The wrong emails. Read only with `wrong_email`, `email_bounced` or `wrong_person`. Absent: every email this result delivered. */
+                    /** @description The wrong emails, among those this result delivered. Read only with `wrong_email`, `email_bounced` or `wrong_person`. Absent: every email this result delivered. */
                     emails?: string[];
                     /** @description Details for the team (bounce message, who answered…). */
                     freeText?: string;
@@ -1576,7 +1653,7 @@ export interface operations {
                     };
                 };
             };
-            /** @description Invalid request: `id` missing or malformed, both `id` and `searchResultId`, negative rating without a reason, unknown reason. */
+            /** @description Invalid request: `id` missing or malformed, both `id` and `searchResultId`, negative rating without a reason, unknown reason, a phone or email this result did not deliver. */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -1590,7 +1667,7 @@ export interface operations {
                 };
                 content?: never;
             };
-            /** @description The result is being rated by another call at the same moment: retry. Or the row belongs to a run without a paying account. */
+            /** @description The result is not paid yet (nothing was delivered), or it is being rated by another call at the same moment (retry), or the row belongs to a run without a paying account. */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -2724,6 +2801,175 @@ export interface operations {
             };
         };
     };
+    listWebhookSubscriptions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Subscriptions, most recent first. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        success?: boolean;
+                        subscriptions?: components["schemas"]["WebhookSubscription"][];
+                    };
+                };
+            };
+            /** @description Invalid or revoked API key. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    subscribeWebhook: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** Format: uri */
+                    url: string;
+                    events: ("enrichment.completed" | "company_enrichment.completed" | "batch_enrichment.completed")[];
+                };
+            };
+        };
+        responses: {
+            /** @description Subscription created. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WebhookSubscription"] & {
+                        success?: boolean;
+                    };
+                };
+            };
+            /** @description URL not https, private, or unknown event. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Invalid or revoked API key. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Call made without an API key (session). */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Too many subscriptions. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    unsubscribeWebhook: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Subscription deleted. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Malformed id (24 hexadecimal characters expected). */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Invalid or revoked API key. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description No subscription of this key with that id. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    listWebhookSamples: {
+        parameters: {
+            query: {
+                event: "enrichment.completed" | "company_enrichment.completed" | "batch_enrichment.completed";
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Sample payloads. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        success?: boolean;
+                        samples?: Record<string, never>[];
+                    };
+                };
+            };
+            /** @description Unknown event. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Call made without an API key (session). */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
     getWebhookSigningSecret: {
         parameters: {
             query?: never;
@@ -2745,6 +2991,13 @@ export interface operations {
                         secret?: string;
                     };
                 };
+            };
+            /** @description Authentication required. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };
@@ -2769,6 +3022,20 @@ export interface operations {
                         secret?: string;
                     };
                 };
+            };
+            /** @description Authentication required. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Reserved to the owner and admin roles of the organization. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };
